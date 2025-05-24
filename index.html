@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Assigning Condition...</title>
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+  <script>
+    async function assignParticipant() {
+      const apiUrl = 'https://gwdeterversion-3ydnwaq9t-jerryguo2001s-projects.vercel.app/api/participant_runsheet';
+
+      try {
+        // Step 1: Fetch CSV from Vercel
+        const response = await fetch(apiUrl);
+        const csvText = await response.text();
+        const parsed = Papa.parse(csvText, { header: true });
+        const rows = parsed.data;
+
+        // Step 2: Assign session1 if any empty
+        let assignedRow = null;
+        for (let row of rows) {
+          if (!row.session1?.trim()) {
+            row.session1 = '1';
+            assignedRow = row;
+            break;
+          }
+        }
+
+        // Step 3: If session1 full, assign session2 only if finished is marked
+        if (!assignedRow) {
+          for (let row of rows) {
+            if (row.finished?.trim() === '1' && !row.session2?.trim()) {
+              row.session2 = '1';
+              assignedRow = row;
+              break;
+            }
+          }
+        }
+
+        // Step 4: If none available
+        if (!assignedRow) {
+          document.body.innerHTML = "<p>No available slots. Please try again later.</p>";
+          return;
+        }
+
+        // Step 5: Convert back to CSV
+        const updatedCsv = Papa.unparse(rows);
+
+        // Step 6: Upload updated CSV back to Vercel
+        await fetch(apiUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain' },
+          body: updatedCsv
+        });
+
+        // Step 7: Redirect based on version
+        const version = assignedRow.version.trim();
+        const redirectUrl = version === '1'
+          ? 'http://gorgonzola.cogsci.uci.edu:20454/' // version 1 link
+          : 'http://gorgonzola.cogsci.uci.edu:20458/'; // version 2 link
+
+        window.location.href = redirectUrl;
+
+      } catch (err) {
+        console.error(err);
+        document.body.innerHTML = "<p>Error assigning condition. Please refresh or contact support.</p>";
+      }
+    }
+
+    window.onload = assignParticipant;
+  </script>
+</head>
+<body>
+  <p>Preparing your session...</p>
+</body>
+</html>
