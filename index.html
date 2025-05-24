@@ -1,82 +1,100 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
+  <meta charset="UTF-8" />
   <title>Assigning Condition...</title>
-  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+</head>
+<body>
+  <p>Preparing your session...</p>
   <script>
+    const fetchUrl = "https://gwdeterversion.vercel.app/api/fetch-runsheet";
+    const uploadUrl = "https://gwdeterversion.vercel.app/api/upload-runsheet";
+
+    function toCSV(headers, rows) {
+      const headerLine = headers.join(",");
+      const rowLines = rows.map(row =>
+        headers.map(h => `"${(row[h] || "").replace(/"/g, '""')}"`).join(",")
+      );
+      return [headerLine, ...rowLines].join("\n");
+    }
+
     async function assignParticipant() {
-      const apiUrl = 'https://gwdeterversion-3ydnwaq9t-jerryguo2001s-projects.vercel.app/api/participant_runsheet';
-
       try {
-        // Step 1: Fetch CSV
-        const response = await fetch(apiUrl);
-        if (!response.ok) throw new Error(`Fetch failed: ${response.status}`);
-        const csvText = await response.text();
-        const parsed = Papa.parse(csvText, { header: true });
-        const rows = parsed.data;
+        console.log("📥 Fetching JSON...");
+        const res = await fetch(fetchUrl);
+        const rows = await res.json(); // THIS is what your server gives
+        console.log("📦 Parsed rows:", rows);
 
-        // Step 2: Assign session1 if available
+        const headers = Object.keys(rows[0]);
+        console.log("🔑 Headers:", headers);
+
         let assignedRow = null;
-        for (let row of rows) {
-          if (!row.session1?.trim()) {
-            row.session1 = '1';
+
+        for (const row of rows) {
+          if (!row.session1) {
+            row.session1 = "1";
             assignedRow = row;
+            console.log("✅ Assigned session1 to row:", row);
             break;
           }
         }
 
-        // Step 3: Else, assign session2 if finished and session2 empty
         if (!assignedRow) {
-          for (let row of rows) {
-            if (row.finished?.trim() === '1' && !row.session2?.trim()) {
-              row.session2 = '1';
+          for (const row of rows) {
+            if (row.finished === "1" && !row.session2) {
+              row.session2 = "1";
               assignedRow = row;
+              console.log("✅ Assigned session2 to row:", row);
               break;
             }
           }
         }
 
-        // Step 4: If nothing can be assigned
         if (!assignedRow) {
           document.body.innerHTML = "<p>No available slots. Please try again later.</p>";
           return;
         }
 
-        // Step 5: Re-serialize to CSV
-        const updatedCsv = Papa.unparse(rows);
+        const updatedCsv = toCSV(headers, rows);
+        console.log("⬆️ Uploading CSV:\n", updatedCsv);
 
-        // Step 6: Upload updated CSV
-        const uploadResponse = await fetch(apiUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'text/plain' },
-          body: updatedCsv
+        const blob = new Blob([updatedCsv], { type: "text/csv" });
+        const formData = new FormData();
+        formData.append("file", blob, "runsheet.csv");
+
+        const uploadRes = await fetch(uploadUrl, {
+          method: "POST",
+          body: formData
         });
-        if (!uploadResponse.ok) throw new Error("Upload failed");
 
-        // Step 7: Redirect based on version
-        const version = assignedRow.version?.trim();
-        if (!version) {
-          document.body.innerHTML = "<p>Version not specified. Contact support.</p>";
+        if (!uploadRes.ok) {
+          const errText = await uploadRes.text();
+          console.error("❌ Upload failed:", errText);
+          document.body.innerHTML = "<p>Upload failed. Please try again.</p>";
           return;
         }
 
-        const redirectUrl = version === '1'
-          ? 'http://gorgonzola.cogsci.uci.edu:20454/'
-          : 'http://gorgonzola.cogsci.uci.edu:20458/';
+        const version = assignedRow.version;
+        const redirectUrl = {
+          "1": "http://gorgonzola.cogsci.uci.edu:20454/",
+          "2": "http://gorgonzola.cogsci.uci.edu:20458/"
+        }[version];
 
+        if (!redirectUrl) {
+          document.body.innerHTML = "<p>Invalid version. Contact support.</p>";
+          return;
+        }
+
+        console.log("➡️ Redirecting to:", redirectUrl);
         window.location.href = redirectUrl;
 
       } catch (err) {
-        console.error(err);
+        console.error("💥 Unexpected error:", err);
         document.body.innerHTML = "<p>Error assigning condition. Please refresh or contact support.</p>";
       }
     }
 
-    window.onload = assignParticipant;
+    assignParticipant();
   </script>
-</head>
-<body>
-  <p>Preparing your session...</p>
 </body>
 </html>
