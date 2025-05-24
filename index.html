@@ -9,13 +9,14 @@
       const apiUrl = 'https://gwdeterversion-3ydnwaq9t-jerryguo2001s-projects.vercel.app/api/participant_runsheet';
 
       try {
-        // Step 1: Fetch CSV from Vercel
+        // Step 1: Fetch CSV
         const response = await fetch(apiUrl);
+        if (!response.ok) throw new Error(`Fetch failed: ${response.status}`);
         const csvText = await response.text();
         const parsed = Papa.parse(csvText, { header: true });
         const rows = parsed.data;
 
-        // Step 2: Assign session1 if any empty
+        // Step 2: Assign session1 if available
         let assignedRow = null;
         for (let row of rows) {
           if (!row.session1?.trim()) {
@@ -25,7 +26,7 @@
           }
         }
 
-        // Step 3: If session1 full, assign session2 only if finished is marked
+        // Step 3: Else, assign session2 if finished and session2 empty
         if (!assignedRow) {
           for (let row of rows) {
             if (row.finished?.trim() === '1' && !row.session2?.trim()) {
@@ -36,27 +37,33 @@
           }
         }
 
-        // Step 4: If none available
+        // Step 4: If nothing can be assigned
         if (!assignedRow) {
           document.body.innerHTML = "<p>No available slots. Please try again later.</p>";
           return;
         }
 
-        // Step 5: Convert back to CSV
+        // Step 5: Re-serialize to CSV
         const updatedCsv = Papa.unparse(rows);
 
-        // Step 6: Upload updated CSV back to Vercel
-        await fetch(apiUrl, {
+        // Step 6: Upload updated CSV
+        const uploadResponse = await fetch(apiUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'text/plain' },
           body: updatedCsv
         });
+        if (!uploadResponse.ok) throw new Error("Upload failed");
 
         // Step 7: Redirect based on version
-        const version = assignedRow.version.trim();
+        const version = assignedRow.version?.trim();
+        if (!version) {
+          document.body.innerHTML = "<p>Version not specified. Contact support.</p>";
+          return;
+        }
+
         const redirectUrl = version === '1'
-          ? 'http://gorgonzola.cogsci.uci.edu:20454/' // version 1 link
-          : 'http://gorgonzola.cogsci.uci.edu:20458/'; // version 2 link
+          ? 'http://gorgonzola.cogsci.uci.edu:20454/'
+          : 'http://gorgonzola.cogsci.uci.edu:20458/';
 
         window.location.href = redirectUrl;
 
