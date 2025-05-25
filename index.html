@@ -41,7 +41,7 @@
 
         if (!assignedRow) {
           for (const row of rows) {
-            if (row.finished === "1" && !row.session2) {
+            if (row.finished != "1" && !row.session2) {
               row.session2 = "1";
               assignedRow = row;
               console.log("✅ Assigned session2 to row:", row);
